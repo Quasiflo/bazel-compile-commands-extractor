@@ -112,6 +112,13 @@ def refresh_compile_commands(
 def _expand_template_impl(ctx):
     """Inject targets of interest--and other settings--into refresh.template.py, and set it up to be run."""
     script = ctx.actions.declare_file(ctx.attr.name)
+
+    def _symlink_prefix_replacer(path):
+        """Replace the bazel- prefix with the experimental --symlink-prefix one if it exists."""
+        if path.startswith("bazel-") and ctx.attr.experimental_symlink_prefix:
+            return path.replace("bazel-", ctx.attr.experimental_symlink_prefix, 1)
+        return path
+
     ctx.actions.expand_template(
         output = script,
         is_executable = True,
@@ -122,7 +129,10 @@ def _expand_template_impl(ctx):
             "        {windows_default_include_paths}": "\n".join(["        %r," % path for path in find_cpp_toolchain(ctx).built_in_include_directories]),  # find_cpp_toolchain is from https://docs.bazel.build/versions/main/integrating-with-rules-cc.html
             "{exclude_headers}": repr(ctx.attr.exclude_headers),
             "{exclude_external_sources}": repr(ctx.attr.exclude_external_sources),
-            "{json_output_path}": repr(ctx.expand_make_variables("json_output_path_expansion", ctx.attr.json_output_path, {})), # Subject to make variable substitutions
+            "{json_output_path}": repr(ctx.expand_make_variables("json_output_path_expansion", ctx.attr.json_output_path, {
+                "BINDIR": _symlink_prefix_replacer(ctx.bin_dir.path),
+                "GENDIR": _symlink_prefix_replacer(ctx.genfiles_dir.path),
+            })),  # Subject to make variable substitutions
             "{print_args_executable}": repr(ctx.executable._print_args_executable.path),
             "{experimental_symlink_prefix}": repr(ctx.attr.experimental_symlink_prefix),
         },
